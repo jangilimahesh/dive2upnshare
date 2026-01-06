@@ -49,3 +49,13 @@ async def worker_loop():
 
         await log_channel(f"✅ Task {task.task_id} completed")
         task_queue.task_done()
+
+async def worker_loop():
+    try:
+        while True:
+            task = await task_queue.get()
+            ...
+            task_queue.task_done()
+    except asyncio.CancelledError:
+        # Render shutdown / redeploy safety
+        return
