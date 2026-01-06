@@ -1,6 +1,5 @@
 require("dotenv").config();
-require("./server");          // 👈 REQUIRED for Render
-require("./src/worker");
+require("./server");
 
 const startBot = require("./src/bot");
 startBot(process.env);
