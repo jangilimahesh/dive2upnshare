@@ -10,6 +10,10 @@ async function downloadFile(url, outDir, onProgress) {
   const id = extractId(url);
   if (!id) throw new Error("Invalid Drive link");
 
+  if (!fs.existsSync(outDir)) {
+    fs.mkdirSync(outDir, { recursive: true });
+  }
+
   const res = await axios({
     url: `https://drive.google.com/uc?export=download&id=${id}`,
     method: "GET",
@@ -19,17 +23,22 @@ async function downloadFile(url, outDir, onProgress) {
   const total = Number(res.headers["content-length"]);
   let done = 0;
 
-  const file = path.join(outDir, `${id}.bin`);
-  const writer = fs.createWriteStream(file);
+  const filePath = path.join(outDir, `${id}.bin`);
+  const writer = fs.createWriteStream(filePath);
 
-  res.data.on("data", c => {
-    done += c.length;
-    if (onProgress && total)
+  res.data.on("data", chunk => {
+    done += chunk.length;
+    if (onProgress && total) {
       onProgress(Math.floor((done / total) * 100));
+    }
   });
 
   res.data.pipe(writer);
-  return new Promise(r => writer.on("finish", () => r(file)));
+
+  return new Promise((resolve, reject) => {
+    writer.on("finish", () => resolve(filePath));
+    writer.on("error", reject);
+  });
 }
 
 module.exports = { downloadFile };

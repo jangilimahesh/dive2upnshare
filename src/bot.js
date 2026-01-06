@@ -11,43 +11,44 @@ const fs = require("fs");
 module.exports = function startBot(cfg) {
   const bot = new TelegramBot(cfg.BOT_TOKEN, { polling: true });
 
-  bot.onText(/\/upload (.+)/, async (msg, m) => {
-    const chat = msg.chat.id;
-    const link = m[1];
+  bot.onText(/\/upload (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const link = match[1];
 
     const files = link.includes("/folders/")
       ? await listFolder(link)
-      : [{ id: link, link }];
+      : [{ id: link.match(/[-\w]{25,}/)[0], link }];
 
     for (const f of files) {
       if (state.exists(f.id)) continue;
 
       queue.add(async () => {
-        let mid = await bot.sendMessage(chat, "⬇️ Downloading");
+        let m = await bot.sendMessage(chatId, "⬇️ Downloading...");
         const file = await downloadFile(f.link, "temp", p =>
           bot.editMessageText(`⬇️ ${bar(p)} ${p}%`, {
-            chat_id: chat,
-            message_id: mid.message_id
+            chat_id: chatId,
+            message_id: m.message_id
           })
         );
 
-        mid = await bot.sendMessage(chat, "⬆️ Uploading");
+        m = await bot.sendMessage(chatId, "⬆️ Uploading...");
         const url = await uploadToUpnshare(
           file,
           cfg.UPNSHARE_API_KEY,
           p => bot.editMessageText(`⬆️ ${bar(p)} ${p}%`, {
-            chat_id: chat,
-            message_id: mid.message_id
+            chat_id: chatId,
+            message_id: m.message_id
           })
         );
 
         state.save({ fileId: f.id, status: "uploaded", url });
+
         await log(cfg.BOT_TOKEN, cfg.LOG_CHANNEL_ID,
           `✅ Uploaded\nOriginal: ${f.link}\nUpnshare: ${url}`
         );
 
         fs.unlinkSync(file);
-        bot.sendMessage(chat, `✅ Done\n${url}`);
+        bot.sendMessage(chatId, `✅ Done\n${url}`);
       });
     }
   });
@@ -63,14 +64,19 @@ module.exports = function startBot(cfg) {
     bot.sendMessage(m.chat.id, "▶️ Queue resumed");
   });
 
+  bot.onText(/\/queue/, m =>
+    bot.sendMessage(m.chat.id, `🧾 Pending: ${queue.tasks.length}`)
+  );
+
   bot.onText(/\/stats/, m => {
     const s = state.stats();
-    bot.sendMessage(m.chat.id,
-      `📊 Stats\nUploaded: ${s.uploaded}\nTotal tracked: ${s.total}`
+    bot.sendMessage(
+      m.chat.id,
+      `📊 Stats\nUploaded: ${s.uploaded}\nTracked: ${s.total}`
     );
   });
 
-  bot.onText(/\/queue/, m =>
-    bot.sendMessage(m.chat.id, `🧾 Pending: ${queue.tasks.length}`)
+  bot.onText(/\/status/, m =>
+    bot.sendMessage(m.chat.id, "🟢 Bot is alive")
   );
 };
